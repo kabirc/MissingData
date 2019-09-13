@@ -11,8 +11,8 @@ from math import e
 
 if __name__ == '__main__':
     # Set the parameters
-    n = 400 
-    p = 600
+    n = 100 
+    p = 20 
     sigma = 0 # additive noise
     sparse = True
     s = int(np.sqrt(p)) + 1 # square root sparsity
@@ -27,44 +27,41 @@ if __name__ == '__main__':
 
     # Run a simulation
     num_trials = 10 
-    alpha_list = np.linspace(0.5, 0.99, 5) # missingness parameter
+    alpha_list = np.linspace(0.85, 0.99, 5) # missingness parameter
     approx_error_vals, approx_max_error_vals, approx_min_error_vals = [], [], [] 
     error_vals, max_error_vals, min_error_vals = [], [], []
     for alpha in alpha_list:
         approx_avg_error, approx_max_error, approx_min_error = 0, 0, 100
         avg_error, max_error, min_error = 0, 0, 100
-
         for i in range(num_trials):
-            banded_dict_approx = {'alpha': alpha\
+            ar_dict_approx = {'alpha': alpha\
                     , 'approx': True\
                     , 'n': n\
                     , 'p': p}
 
-            banded_dict = {'alpha': alpha\
+            ar_dict = {'alpha': alpha\
                     , 'approx': False\
                     , 'n': n\
                     , 'p': p}
-
-            banded_gaussian_approx = BandedData(banded_dict_approx)
-            banded_gaussian = BandedData(banded_dict)
+            ar_gaussian_approx = ARData(ar_dict_approx)
+            ar_gaussian = ARData(ar_dict)
 
             imputation_dict_approx = {'sparse': sparse, \
                     'beta0': beta0, \
                     'sigma': sigma, \
-                    'data': banded_gaussian_approx, \
+                    'data': ar_gaussian_approx, \
                     'alpha': alpha, \
-                    'lambda': 1.59965746 * np.sqrt((1 - alpha)) * np.sqrt(np.log(p)/n)}
+                    'lambda': 4/alpha**4 * np.sqrt(np.log(p)/n)}
 
             imputation_dict = {'sparse': sparse, \
                     'beta0': beta0, \
                     'sigma': sigma, \
-                    'data': banded_gaussian, \
+                    'data': ar_gaussian, \
                     'alpha': alpha, \
-                    'lambda': 1.59965746 * np.sqrt((1 - alpha)) * np.sqrt(np.log(p)/n)}
+                    'lambda': 4/alpha**4 * np.sqrt(np.log(p)/n)}
 
             imputation_test_approx = ImputationMissingData(imputation_dict_approx)
             imputation_test = ImputationMissingData(imputation_dict)
-
             error_approx = imputation_test_approx.get_l2_error()
             error = imputation_test.get_l2_error()
             avg_error += error
@@ -81,11 +78,9 @@ if __name__ == '__main__':
 
         avg_error = avg_error/num_trials
         approx_avg_error = approx_avg_error/num_trials
-
         error_vals.append(avg_error)
         max_error_vals.append(max_error)
         min_error_vals.append(min_error)
-
         approx_error_vals.append(approx_avg_error)
         approx_max_error_vals.append(approx_max_error)
         approx_min_error_vals.append(approx_min_error)
@@ -93,7 +88,7 @@ if __name__ == '__main__':
     ### Save the data
     data = np.array([alpha_list, error_vals, min_error_vals, max_error_vals, \
                  approx_error_vals, approx_min_error_vals, approx_max_error_vals]).transpose()
-
-    np.savetxt('BandedGaussianBig{0}.dat'.format(n), data, fmt=['%.2f', '%.4f', '%.6f', '%.8f',\
+    print(data.shape)
+    np.savetxt('ARGaussian.dat', data, fmt=['%.2f', '%.4f', '%.6f', '%.8f',\
             '%.10f', '%.12f', '%.14f'],\
             header='alpha   err min_err max_err apx_err apx_min_err apx_max_err', comments='# ')

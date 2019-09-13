@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 from math import e
 from collections import deque
 
@@ -64,19 +65,69 @@ class ARData(DataMatrix):
         self.phi = phi
         self.cov = self.get_covariance()
 
-    def set_covariance(self):
+    def create_covariance(self):
         self.cov = np.ones((self.p, self.p))
+        cov_vals = self.phi**(np.array(range(self.p)))
+        self.cov = 1/(1 - self.phi**2) * scipy.linalg.toeplitz(cov_vals)
 
 
     def get_X_hat(self, Z):
         """
         Return the imputed matrix
         """
+        X_hat = np.zeros(Z.shape)
+        phi_hat = self.get_phi(Z)
+        for i in range(self.n):
+            S_i = np.where(~np.isnan(Z_i))[0] # Assumes this list is sorted
+            prev = -1
+            for k in S_i:
+                # case 1: no observations to the left
+                if prev == -1:
+                    for a in range(k):
+                        X_hat[i, a] = phi_hat**k * Z[i,k]
+                    prev = k
+
+                # case 2: Standard case (obs. on left and right)
+                else:
+                    for a in range(prev, k):
+                        d1, d2 = a - prev, k - a # distance to left/right, resp.
+                        prefactor = phi_hat**(d1+d2)\
+                                    /(1 - phi_hat**(2 * (d1+d2)))
+                        term_left = Z[i,prev] * (phi**(-d2) - phi**(d2))
+                        term_right = Z[i,k] * (phi**(-d1) - phi**(d1))
+                        X_hat[i,a] = prefactor * (term_left + term_right)
+                    prev = k
+
+            # case 3: no observations to the right
+            for a in range(prev, self.p):
+                X_hat[i,a] = phi_hat**(self.p - a) * Z[i,prev]
+
+        self.X_hat = X_hat
+        return X_hat
+
 
     def get_phi(self, Z):
         """
         Return the estimate of phi
         """
+        if self.approx:
+            num, denom = 0, 0 
+            for i in range(self.n):
+                for a in range(self.p - 1):
+                    if np.isnan(Z[i,a]) or np.isnan(Z[i,a+1]):
+                        num += 0
+                    else: 
+                        num += Z[i,a] * Z[i, a+1]
+                    if np.isnan(Z[i,a]):
+                        denom += 0
+                    else: 
+                        denom += Z[i,a]**2
+            num = 1/(self.alpha **2 *self.n * (self.p - 1)) * num
+            denom = 1/(self.alpha * self.n * (self.p - 1)) * denom
+            return num/denom
+
+        else: 
+            return self.phi
 
 
 class BandedData(DataMatrix):
