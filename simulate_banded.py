@@ -11,8 +11,8 @@ from math import e
 
 if __name__ == '__main__':
     # Set the parameters
-    n = 400 
-    p = 600
+    n = 1000 
+    p = 1200 
     sigma = 0 # additive noise
     sparse = True
     s = int(np.sqrt(p)) + 1 # square root sparsity

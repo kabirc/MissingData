@@ -6,13 +6,13 @@ from sklearn.linear_model import Lasso
 from random import randint
 from collections import defaultdict
 from imputation import ImputationMissingData
-from data import DataMatrix, DiagonalData, BandedData
+from data import DataMatrix, DiagonalData, BandedData, ARData
 from math import e
 
 if __name__ == '__main__':
     # Set the parameters
-    n = 100 
-    p = 20 
+    n = 1000 
+    p = 1200 
     sigma = 0 # additive noise
     sparse = True
     s = int(np.sqrt(p)) + 1 # square root sparsity
@@ -26,8 +26,8 @@ if __name__ == '__main__':
         beta0 = np.ones(p)
 
     # Run a simulation
-    num_trials = 10 
-    alpha_list = np.linspace(0.85, 0.99, 5) # missingness parameter
+    num_trials = 20 
+    alpha_list = np.linspace(0.7, 0.99, 10) # missingness parameter
     approx_error_vals, approx_max_error_vals, approx_min_error_vals = [], [], [] 
     error_vals, max_error_vals, min_error_vals = [], [], []
     for alpha in alpha_list:
@@ -51,14 +51,14 @@ if __name__ == '__main__':
                     'sigma': sigma, \
                     'data': ar_gaussian_approx, \
                     'alpha': alpha, \
-                    'lambda': 4/alpha**4 * np.sqrt(np.log(p)/n)}
+                    'lambda': 1/alpha**4 * np.sqrt(np.log(p)/n)}
 
             imputation_dict = {'sparse': sparse, \
                     'beta0': beta0, \
                     'sigma': sigma, \
                     'data': ar_gaussian, \
                     'alpha': alpha, \
-                    'lambda': 4/alpha**4 * np.sqrt(np.log(p)/n)}
+                    'lambda': 1/alpha**4 * np.sqrt(np.log(p)/n)}
 
             imputation_test_approx = ImputationMissingData(imputation_dict_approx)
             imputation_test = ImputationMissingData(imputation_dict)

@@ -31,7 +31,7 @@ class DiagonalData(DataMatrix):
     Simplest example of data matrix.  Gaussian with diagonal covariance matrix.
     """
     def __init__(self, diag_dict):
-        DataMatrix.__init__(diag_dict)
+        DataMatrix.__init__(self, diag_dict)
         self.cov = np.diag(diag_dict['diagonal'])
         self.diag = diag_dict['diagonal']
         # Data is generated in the class for this simple model
@@ -59,16 +59,19 @@ class ARData(DataMatrix):
     Takes in a parameter phi that sets the gain of the process.
     """
     def __init__(self, ar_dict, phi = 0.1):
-        DataMatrix.__init__(ar_dict)
+        DataMatrix.__init__(self, ar_dict)
         self.approx = ar_dict['approx'] # true if need to approx cov
         self.alpha = ar_dict['alpha']
         self.phi = phi
-        self.cov = self.get_covariance()
+        self.cov = self.create_covariance()
+        self.X = np.random.multivariate_normal(np.zeros(self.p)\
+                , self.cov, self.n)
 
     def create_covariance(self):
-        self.cov = np.ones((self.p, self.p))
+        cov = np.ones((self.p, self.p))
         cov_vals = self.phi**(np.array(range(self.p)))
-        self.cov = 1/(1 - self.phi**2) * scipy.linalg.toeplitz(cov_vals)
+        cov = 1/(1 - self.phi**2) * scipy.linalg.toeplitz(cov_vals)
+        return cov
 
 
     def get_X_hat(self, Z):
@@ -78,6 +81,7 @@ class ARData(DataMatrix):
         X_hat = np.zeros(Z.shape)
         phi_hat = self.get_phi(Z)
         for i in range(self.n):
+            Z_i = np.array(Z[i,:])
             S_i = np.where(~np.isnan(Z_i))[0] # Assumes this list is sorted
             prev = -1
             for k in S_i:
@@ -93,8 +97,8 @@ class ARData(DataMatrix):
                         d1, d2 = a - prev, k - a # distance to left/right, resp.
                         prefactor = phi_hat**(d1+d2)\
                                     /(1 - phi_hat**(2 * (d1+d2)))
-                        term_left = Z[i,prev] * (phi**(-d2) - phi**(d2))
-                        term_right = Z[i,k] * (phi**(-d1) - phi**(d1))
+                        term_left = Z[i,prev] * (phi_hat**(-d2) - phi_hat**(d2))
+                        term_right = Z[i,k] * (phi_hat**(-d1) - phi_hat**(d1))
                         X_hat[i,a] = prefactor * (term_left + term_right)
                     prev = k
 
@@ -140,7 +144,7 @@ class BandedData(DataMatrix):
     n_bands.  We default setting n_bands = 3.
     """
     def __init__(self, banded_dict, n_bands = 3, phi = 0.25):
-        DataMatrix.__init__(banded_dict)
+        DataMatrix.__init__(self, banded_dict)
         self.approx = banded_dict['approx'] # true if need to approx cov
         self.alpha = banded_dict['alpha'] # nan if need to estimate alpha
         self.omega = self.create_precision_mat(n_bands, phi)
@@ -269,27 +273,28 @@ class BandedData(DataMatrix):
         S, X_S = np.where(~np.isnan(Z_i))[0], Z_i[~np.isnan(Z_i)] 
         Sc = np.where(np.isnan(Z_i))[0] # Missing indices
         to_impute[S] = X_S
-        Sc_impute = np.array([self.node_impute(idx, S, Z_i, cov) for idx in Sc]).reshape(Sc.shape)
+        Sc_impute = np.zeros(Sc.shape[0])
+
+        # Want to avoid replicating work
+        seen = {}
+        for j, idx in zip(range(Sc.shape[0]), Sc):
+            if idx in seen:
+                Sc_impute[j] = seen[idx]
+            else:
+                blanket, equiv_nodes = self.find_blanket(idx, S)
+                X_blanket = Z_i[blanket]
+                inv_cov_blanket = np.linalg.inv(cov[np.ix_(blanket,blanket)])
+
+                cov_idxS = cov[np.ix_(np.array([idx]), blanket)]
+                idx_impute = np.dot(np.dot(cov_idxS, inv_cov_blanket), X_blanket)
+                seen[idx] =  idx_impute
+                Sc_impute[j] = idx_impute 
+                for k in equiv_nodes:
+                    cov_kS = cov[np.ix_(np.array([k]), blanket)]
+                    seen[k] = np.dot(np.dot(cov_kS, inv_cov_blanket), X_blanket) 
         to_impute[Sc] = Sc_impute 
-        """
-        for idx in Sc:
-            blanket = np.array(self.find_blanket(idx, S))
-            X_blanket = Z_i[blanket]
-            inv_cov_blanket = np.linalg.inv(cov[np.ix_(blanket, blanket)])
-            cov_idxS = cov[np.ix_(np.array([idx]), blanket)]
-            to_impute[idx] = np.dot(np.dot(cov_idxS, inv_cov_blanket), X_blanket)
-        """
         return to_impute
 
-    def node_impute(self, idx, S, Z_i, cov):
-        """
-        Helper function to impute a node
-        """
-        blanket = np.array(self.find_blanket(idx, S))
-        X_blanket = Z_i[blanket]
-        inv_cov_blanket = np.linalg.inv(cov[np.ix_(blanket, blanket)])
-        cov_idxS = cov[np.ix_(np.array([idx]), blanket)]
-        return np.dot(np.dot(cov_idxS, inv_cov_blanket), X_blanket)
 
     def find_blanket(self, node, S):
         """
@@ -299,7 +304,7 @@ class BandedData(DataMatrix):
         for bfs implementation
         """
         visited, queue = set(), deque([node])
-        blanket = []
+        blanket, nodes = [], [] # nodes is the nodes with same blanket
         while queue:
             vertex = queue.popleft()
             for neighbor in self.graphical_model[vertex]:
@@ -308,8 +313,9 @@ class BandedData(DataMatrix):
                     if np.any(S == neighbor):
                         blanket.append(neighbor)
                     else:
+                        nodes.append(neighbor)
                         queue.append(neighbor)
-        return blanket 
+        return blanket, nodes 
 
 class RealData(DataMatrix):
     """
